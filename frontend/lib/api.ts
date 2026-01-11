@@ -1,0 +1,168 @@
+import { TrackedRecord, TrackedRecordCreate, TrackedRecordUpdate, SyncStatus, SyncResult, ImportRequest, AuditEntry, Domain, DomainCreate, DomainUpdate } from '../types'
+
+// Dynamic API base URL that works for both localhost and remote access
+const getApiBase = () => {
+  // If NEXT_PUBLIC_API_URL is explicitly set, use it
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+  
+  // For client-side, use current window location to build API URL
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol
+    const hostname = window.location.hostname
+    return `${protocol}//${hostname}:8081`
+  }
+  
+  // Fallback for server-side rendering
+  return 'http://localhost:8081'
+}
+
+async function fetchApi(endpoint: string, options: RequestInit = {}) {
+  const API_BASE = getApiBase() // Get fresh API base for each request
+  const url = `${API_BASE}${endpoint}`
+  
+  const response = await fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}`
+    try {
+      const errorData = await response.json()
+      errorMessage = errorData.detail || errorMessage
+    } catch (e) {
+      // Use default error message
+    }
+    throw new Error(errorMessage)
+  }
+
+  const contentType = response.headers.get('content-type')
+  if (contentType && contentType.includes('application/json')) {
+    return response.json()
+  }
+  
+  return response.text()
+}
+
+export const api = {
+  // Auth
+  login: async (email: string, password: string) => {
+    return fetchApi('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+  },
+
+  logout: async () => {
+    return fetchApi('/api/auth/logout', {
+      method: 'POST',
+    })
+  },
+
+  getCurrentUser: async () => {
+    return fetchApi('/api/auth/me')
+  },
+
+  // Records
+  getRecords: async (filters?: { domain?: string; fqdn?: string; record_type?: string }): Promise<TrackedRecord[]> => {
+    const params = new URLSearchParams()
+    if (filters?.domain) params.set('domain', filters.domain)
+    if (filters?.fqdn) params.set('fqdn', filters.fqdn)
+    if (filters?.record_type) params.set('record_type', filters.record_type)
+    
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return fetchApi(`/api/records${query}`)
+  },
+
+  createRecord: async (record: TrackedRecordCreate): Promise<TrackedRecord> => {
+    return fetchApi('/api/records', {
+      method: 'POST',
+      body: JSON.stringify(record),
+    })
+  },
+
+  updateRecord: async (id: number, record: TrackedRecordUpdate): Promise<TrackedRecord> => {
+    return fetchApi(`/api/records/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(record),
+    })
+  },
+
+  deleteRecord: async (id: number, deleteFromCloudflare: boolean = true) => {
+    const params = new URLSearchParams()
+    params.set('delete_from_cloudflare', deleteFromCloudflare.toString())
+    return fetchApi(`/api/records/${id}?${params.toString()}`, {
+      method: 'DELETE',
+    })
+  },
+
+  // Sync
+  manualSync: async (): Promise<SyncResult> => {
+    return fetchApi('/api/sync', {
+      method: 'POST',
+    })
+  },
+
+  getStatus: async (): Promise<SyncStatus> => {
+    return fetchApi('/api/status')
+  },
+
+  // Import
+  importRecords: async (importData: ImportRequest) => {
+    return fetchApi('/api/import', {
+      method: 'POST',
+      body: JSON.stringify(importData),
+    })
+  },
+
+  // Audit
+  getAuditLog: async (limit: number = 50, offset: number = 0): Promise<AuditEntry[]> => {
+    const params = new URLSearchParams()
+    params.set('limit', limit.toString())
+    params.set('offset', offset.toString())
+    return fetchApi(`/api/audit?${params.toString()}`)
+  },
+
+  // Settings
+  getSetting: async (key: string) => {
+    return fetchApi(`/api/settings/${key}`)
+  },
+
+  updateSetting: async (key: string, value: string) => {
+    return fetchApi(`/api/settings/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    })
+  },
+
+  // Domains
+  getDomains: async (): Promise<Domain[]> => {
+    return fetchApi('/api/domains')
+  },
+
+  createDomain: async (domain: DomainCreate): Promise<Domain> => {
+    return fetchApi('/api/domains', {
+      method: 'POST',
+      body: JSON.stringify(domain),
+    })
+  },
+
+  updateDomain: async (id: number, domain: DomainUpdate): Promise<Domain> => {
+    return fetchApi(`/api/domains/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(domain),
+    })
+  },
+
+  deleteDomain: async (id: number) => {
+    return fetchApi(`/api/domains/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}

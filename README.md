@@ -1,4 +1,4 @@
-# DDNS Manager
+# Dreadnought DDNS Manager
 
 A production-ready, self-hosted Dynamic DNS (DDNS) manager for Cloudflare that automatically updates DNS A/AAAA records when your public IP address changes.
 

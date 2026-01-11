@@ -1,0 +1,60 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/ddns.db
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeMe!}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-300}
+      - IPV6_ENABLED=${IPV6_ENABLED:-true}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - TZ=${TZ:-America/Denver}
+    depends_on:
+      - worker
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/ddns.db
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-300}
+      - IPV6_ENABLED=${IPV6_ENABLED:-true}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - TZ=${TZ:-America/Denver}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8082:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8081
+      - NODE_ENV=production
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped

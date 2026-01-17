@@ -102,7 +102,7 @@ The application will be available at:
 
 ### 4. Initial Setup
 
-1. Open http://localhost:8080 in your browser
+1. Open http://localhost:8082 in your browser
 2. Login with the admin credentials from your `.env` file
 3. Add your first DNS records in the Records tab
 4. Configure settings in the Settings tab

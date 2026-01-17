@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# DarkDDNS Setup Script
-# This script prepares the environment for running DarkDDNS
+# DreadnoughtDDNS Setup Script
+# This script prepares the environment for running DreadnoughtDDNS
 
-echo "🚀 Setting up DarkDDNS..."
+echo "🚀 Setting up Dreadnought..."
 
 # Create data directory if it doesn't exist
 if [ ! -d "./data" ]; then
@@ -26,7 +26,7 @@ fi
 
 echo "✅ Setup complete!"
 echo ""
-echo "You can now start DarkDDNS with:"
-echo "  docker-compose up -d"
+echo "You can now start DreadnoughtDDNS with:"
+echo "  docker compose up -d"
 echo ""
 echo "Access the dashboard at: http://localhost:8082"

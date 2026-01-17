@@ -42,7 +42,7 @@ A production-ready, self-hosted Dynamic DNS (DDNS) manager for Cloudflare that a
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd ddns-manager
+cd Dreadnought-DDNS
 
 # Copy environment template
 cp .env.sample .env

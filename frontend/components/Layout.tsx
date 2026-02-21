@@ -102,8 +102,17 @@ export default function Layout({ children }: LayoutProps) {
     return <>{children}</>
   }
 
+  const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Demo banner */}
+      {isDemo && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white text-center text-sm font-semibold py-2.5 px-4 shadow-md">
+          DEMO — This is a live demo. Do not enter real API keys or domain information.
+        </div>
+      )}
+
       {/* Mobile sidebar */}
       <div className={`relative z-50 lg:hidden ${sidebarOpen ? '' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-900/80" onClick={() => setSidebarOpen(false)} />
@@ -154,7 +163,7 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Static sidebar for desktop */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
+      <div className={`hidden lg:fixed lg:z-50 lg:flex lg:w-72 lg:flex-col lg:bottom-0 ${isDemo ? 'lg:top-10' : 'lg:top-0'}`}>
         <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6">
           <div className="flex h-16 shrink-0 items-center">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Dreadnought DDNS</h1>
@@ -201,8 +210,8 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </div>
 
-      <div className="lg:pl-72">
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+      <div className={`lg:pl-72 ${isDemo ? 'mt-10' : ''}`}>
+        <div className={`sticky z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8 ${isDemo ? 'top-10' : 'top-0'}`}>
           <button
             type="button"
             className="-m-2.5 p-2.5 text-gray-700 dark:text-gray-300 lg:hidden"

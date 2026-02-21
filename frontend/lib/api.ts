@@ -1,4 +1,5 @@
 import { TrackedRecord, TrackedRecordCreate, TrackedRecordUpdate, SyncStatus, SyncResult, ImportRequest, AuditEntry, Domain, DomainCreate, DomainUpdate } from '../types'
+import { demoApi } from './demoApi'
 
 // Dynamic API base URL that works for both localhost and remote access
 const getApiBase = () => {
@@ -50,7 +51,7 @@ async function fetchApi(endpoint: string, options: RequestInit = {}) {
   return response.text()
 }
 
-export const api = {
+const realApi = {
   // Auth
   login: async (email: string, password: string) => {
     return fetchApi('/api/auth/login', {
@@ -166,3 +167,6 @@ export const api = {
     })
   },
 }
+
+// In demo mode, use the in-memory mock API instead of making real network calls.
+export const api = process.env.NEXT_PUBLIC_DEMO_MODE === 'true' ? demoApi : realApi

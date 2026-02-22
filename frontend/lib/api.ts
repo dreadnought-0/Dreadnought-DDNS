@@ -1,20 +1,23 @@
 import { TrackedRecord, TrackedRecordCreate, TrackedRecordUpdate, SyncStatus, SyncResult, ImportRequest, AuditEntry, Domain, DomainCreate, DomainUpdate } from '../types'
 
-// Dynamic API base URL that works for both localhost and remote access
+// Dynamic API base URL resolution.
+// Priority:
+//   1. NEXT_PUBLIC_API_URL env var (set this for any non-trivial deployment)
+//   2. window.location.origin (works when the frontend and API share the same
+//      origin, e.g. behind a reverse proxy that routes /api/* to the backend)
+//   3. SSR fallback – 'http://localhost:8081' for local development
+//
+// For direct Docker Compose access (frontend on :8082, API on :8081) docker-compose.yml
+// already sets NEXT_PUBLIC_API_URL=http://localhost:8081, so the fallback is never used.
 const getApiBase = () => {
-  // If NEXT_PUBLIC_API_URL is explicitly set, use it
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL
   }
-  
-  // For client-side, use current window location to build API URL
+
   if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol
-    const hostname = window.location.hostname
-    return `${protocol}//${hostname}:8081`
+    return window.location.origin
   }
-  
-  // Fallback for server-side rendering
+
   return 'http://localhost:8081'
 }
 

@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -9,7 +10,17 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+logger = logging.getLogger(__name__)
+
+_INSECURE_DEFAULT_KEY = "your-secret-key-change-in-production"
+SECRET_KEY = os.getenv("SECRET_KEY", _INSECURE_DEFAULT_KEY)
+
+if not SECRET_KEY or SECRET_KEY == _INSECURE_DEFAULT_KEY:
+    raise ValueError(
+        "SECRET_KEY environment variable is not set or is using the insecure default value. "
+        "Set a strong, random SECRET_KEY before starting the application."
+    )
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

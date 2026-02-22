@@ -35,9 +35,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware - Allow access from local network
-# For local network deployment, allow all origins by default
-cors_origins = ["*"]  # Allow all origins for local network use
+# CORS middleware
+# Use CORS_ORIGINS env var (comma-separated) for production; defaults to wildcard for local use.
+# Note: allow_credentials=True with allow_origins=["*"] causes browsers to reflect the Origin
+# header rather than returning "*", meaning any origin gets credentialed access. Set
+# CORS_ORIGINS explicitly in production (e.g. "https://ddns.example.com").
+_cors_env = os.getenv("CORS_ORIGINS", "")
+cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,29 +67,40 @@ async def global_exception_handler(request: Request, exc: Exception):
         traceback=tb_str
     )
 
+    # Return a generic message; never expose exception details to clients
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "Internal Server Error",
-            "message": str(exc),
-            "type": type(exc).__name__
-        }
+        content={"detail": "An unexpected internal error occurred."}
     )
 
 
 # Initialize database first
 create_tables()
 
-# Initialize services
-sync_service = SyncService()
-ip_detector = IPDetector()
+# Services are initialised inside startup_event so that a missing CF_API_TOKEN
+# does not crash the process at import time.
+sync_service: Optional[SyncService] = None
+ip_detector: Optional[IPDetector] = None
+
+# Whether to set the Secure flag on the session cookie.
+# Enable this whenever the app is served over HTTPS.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
+
+_DEFAULT_ADMIN_EMAIL = "admin@localhost.local"
+_DEFAULT_ADMIN_PASSWORD = "ChangeMe!"
 
 
 async def create_admin_user():
     """Create default admin user if it doesn't exist"""
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@localhost.local")
-    admin_password = os.getenv("ADMIN_PASSWORD", "ChangeMe!")
-    
+    admin_email = os.getenv("ADMIN_EMAIL", _DEFAULT_ADMIN_EMAIL)
+    admin_password = os.getenv("ADMIN_PASSWORD", _DEFAULT_ADMIN_PASSWORD)
+
+    if admin_email == _DEFAULT_ADMIN_EMAIL or admin_password == _DEFAULT_ADMIN_PASSWORD:
+        logger.warning(
+            "ADMIN_EMAIL or ADMIN_PASSWORD is using the insecure default value. "
+            "Set ADMIN_EMAIL and ADMIN_PASSWORD environment variables before deploying."
+        )
+
     with next(get_db()) as db:
         existing_user = db.query(User).filter(User.email == admin_email).first()
         if not existing_user:
@@ -101,6 +116,12 @@ async def create_admin_user():
 
 @app.on_event("startup")
 async def startup_event():
+    global sync_service, ip_detector
+    try:
+        sync_service = SyncService()
+    except ValueError as e:
+        logger.error(f"Failed to initialise SyncService: {e}. Sync endpoints will be unavailable.")
+    ip_detector = IPDetector()
     await create_admin_user()
 
 
@@ -125,12 +146,12 @@ async def login(
     
     access_token = create_access_token(data={"sub": user.email})
     
-    # Set HTTP-only cookie
+    # Set HTTP-only cookie; COOKIE_SECURE env var controls the Secure flag
     response.set_cookie(
         key="session_token",
         value=access_token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=COOKIE_SECURE,
         samesite="strict",
         max_age=30 * 60  # 30 minutes
     )
@@ -357,11 +378,26 @@ async def update_record(
     for field, value in update_dict.items():
         setattr(db_record, field, value)
     
-    # Recompute FQDN if domain or host changed
+    # Recompute FQDN if domain or host changed, then check for duplicates
     if domain_changed:
         host = getattr(db_record, 'host', '@')
         domain = getattr(db_record, 'domain', '')
-        db_record.fqdn = domain if host == '@' else f"{host}.{domain}"
+        new_fqdn = domain if host == '@' else f"{host}.{domain}"
+
+        conflict = db.query(TrackedRecord).filter(
+            and_(
+                TrackedRecord.fqdn == new_fqdn,
+                TrackedRecord.type == db_record.type,
+                TrackedRecord.id != record_id
+            )
+        ).first()
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{db_record.type} record for {new_fqdn} already exists"
+            )
+
+        db_record.fqdn = new_fqdn
     
     # Update zone_id_cached if zone_identifier changed
     if 'zone_identifier' in update_dict:

@@ -1,280 +1,249 @@
 # Dreadnought DDNS Manager
 
-A production-ready, self-hosted Dynamic DNS (DDNS) manager for Cloudflare that automatically updates DNS A/AAAA records when your public IP address changes.
+A production-ready, self-hosted Dynamic DNS (DDNS) manager for Cloudflare that automatically updates your DNS A/AAAA records whenever your public IP address changes.
+
+**[Live Demo](http://ddns.demo.dreadnought.work/)** — Use `me@example.com` / `admin` to log in. No real data is stored.
+
+---
 
 ## Features
 
-- **Automatic IP Detection**: Monitors IPv4 and IPv6 addresses at configurable intervals
-- **Immediate Updates**: Manual updates via web UI are synced immediately to Cloudflare
-- **Clean Web Interface**: Modern React/Next.js UI with Tailwind CSS styling
-- **Secure Authentication**: Local email/password authentication with session management
-- **Rate Limit Handling**: Intelligent backoff and retry logic for Cloudflare API calls
-- **Import Support**: Bulk import DNS records from legacy JSON format
-- **Audit Logging**: Complete activity tracking and history
-- **Docker Deployment**: One-command deployment with docker-compose
-- **Proxied Record Support**: Full support for Cloudflare's proxy features with automatic TTL handling
+- **Automatic IP Detection** — Monitors IPv4 and IPv6 at configurable intervals
+- **Immediate Sync** — Changes made in the UI are pushed to Cloudflare instantly
+- **Domain Management** — Register multiple Cloudflare zones and manage them in one place
+- **Bulk Import** — Import DNS records from a legacy JSON format with dry-run preview
+- **Audit Log** — Full activity history for every sync, add, edit, and delete
+- **Discord Notifications** — Optional webhook alerts when your IP changes
+- **Dark Mode** — System-aware theme with manual toggle
+- **Docker-first** — One-command deployment, runs on anything from a Raspberry Pi to a cloud VPS
 
 ## Architecture
 
-- **Frontend**: Next.js 14 (App Router) + TypeScript + Tailwind CSS
-- **Backend API**: FastAPI (Python 3.12) + SQLAlchemy + Pydantic
-- **Worker Process**: APScheduler for periodic IP monitoring and sync
-- **Database**: SQLite with persistent volume storage
-- **Authentication**: Session-based with HttpOnly cookies and CSRF protection
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Backend API | FastAPI (Python 3.12), SQLAlchemy, Pydantic |
+| Background Worker | APScheduler — periodic IP monitoring and sync |
+| Database | SQLite with persistent volume |
+| Auth | Session cookies (HttpOnly, SameSite=strict, 30-min expiry) |
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker and Docker Compose
-- Cloudflare account with API token
+- Docker and Docker Compose installed
+- A Cloudflare account with at least one domain
 
-### 1. Get Cloudflare API Token
+### 1. Get a Cloudflare API Token
 
 1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Create a new token with these permissions:
-   - **Zone:Zone:Read** (for all zones or specific zones)
-   - **Zone:DNS:Edit** (for all zones or specific zones)
-3. Copy the token - you'll need it for the next step
+2. Create a new **Custom Token** with these permissions:
+   - `Zone → Zone → Read`
+   - `Zone → DNS → Edit`
+3. Scope it to specific zones for better security, or all zones for convenience
+4. Copy the token
 
-### 2. Set Up Environment
+### 2. Clone and Configure
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+git clone https://github.com/dreadnought-0/Dreadnought-DDNS.git
 cd Dreadnought-DDNS
 
-# Copy environment template
+# Copy the sample environment file
 cp .env.sample .env
 
-# Edit .env with your settings
+# Edit with your values
 nano .env
 ```
 
-Required environment variables:
+Key variables to set in `.env`:
+
 ```env
-# Cloudflare API Token - REQUIRED
+# Required
 CF_API_TOKEN=your_cloudflare_api_token_here
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD=ChangeThisPassword
 
-# Admin credentials for initial login
-ADMIN_EMAIL=admin@local
-ADMIN_PASSWORD=ChangeMe!
+# Generate a strong random key (Linux/Mac: openssl rand -hex 32)
+SECRET_KEY=your-secret-key-here
 
-# Security - Generate a secure random key
-SECRET_KEY=your-super-secret-key-change-in-production
-
-# Worker settings
-POLL_INTERVAL_SECONDS=300
-IPV6_ENABLED=true
-
-# Optional Discord notifications
-DISCORD_WEBHOOK_URL=
+# Optional
+POLL_INTERVAL_SECONDS=300   # How often to check for IP changes (60–7200)
+IPV6_ENABLED=false          # Set to true to also manage AAAA records
+DISCORD_WEBHOOK_URL=        # Leave blank to disable
+TZ=America/Denver           # Your timezone
 ```
 
-### 3. Run Setup Script (Important for Raspberry Pi)
+### 3. Deploy
+
+How you deploy depends on your environment. Choose the method that fits:
+
+---
+
+#### Option A — Coolify (recommended for cloud/VPS)
+
+Coolify handles the data directory, permissions, TLS, and reverse proxy automatically.
+
+1. Create a new **Docker Compose** resource in Coolify and point it at this repository
+2. Set your environment variables in the Coolify UI (same variables as above)
+3. Set the `NEXT_PUBLIC_API_URL` environment variable on the `web` service to the **public URL of your API service** (e.g. `https://ddns-api.yourdomain.com`)
+4. Assign a domain to the `web` service and a domain to the `api` service
+5. Deploy — Coolify manages everything else
+
+> The `worker` service runs in the background and does not need a domain assigned to it.
+
+---
+
+#### Option B — Direct Docker Compose on Linux / Raspberry Pi
 
 ```bash
-# Make the setup script executable
-chmod +x setup.sh
+# Create the data directory with write permissions for the container
+mkdir -p ./data
+chmod 777 ./data
 
-# Run the setup script - this creates the data directory with proper permissions
-./setup.sh
-```
-
-**Note for Raspberry Pi users**: The setup script is **required** to avoid database permission errors.
-
-### 4. Deploy
-
-```bash
 # Start all services
 docker compose up -d
 
-# Check status
+# Check everything is running
 docker compose ps
 
-# View logs
+# Follow logs
 docker compose logs -f
 ```
 
-The application will be available at:
+> **Why the data directory step?** Docker needs write access to `./data` to create the SQLite database. This is handled automatically by Coolify and other PaaS platforms, but must be done manually on a bare Linux host. The included `setup.sh` script does this for you if you prefer: `chmod +x setup.sh && ./setup.sh`.
+
+The app will be available at:
 - **Web UI**: http://localhost:8082
 - **API**: http://localhost:8081
 
-### 4. Initial Setup
+You will need a reverse proxy (Nginx, Caddy, Traefik) in front of it to expose it publicly with HTTPS. See [DEPLOYMENT.md](DEPLOYMENT.md) for examples.
 
-1. Open http://localhost:8082 in your browser
-2. Login with the admin credentials from your `.env` file
-3. Add your first DNS records in the Records tab
-4. Configure settings in the Settings tab
+---
 
-## Configuration
+### 4. First Login
+
+1. Open the web UI in your browser
+2. Log in with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` from your `.env`
+3. Go to **Domains** and add your first Cloudflare domain (you'll need the Zone ID from your Cloudflare dashboard)
+4. Go to **Records** and add the DNS records you want tracked
+
+---
+
+## Configuration Reference
 
 ### Environment Variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `CF_API_TOKEN` | *required* | Cloudflare API token with Zone:Zone:Read and Zone:DNS:Edit permissions |
-| `ADMIN_EMAIL` | `admin@local` | Initial admin user email |
-| `ADMIN_PASSWORD` | `ChangeMe!` | Initial admin user password |
-| `SECRET_KEY` | *generate* | Secret key for session signing (use a strong random value) |
-| `POLL_INTERVAL_SECONDS` | `300` | How often to check for IP changes (60-3600 seconds) |
-| `IPV6_ENABLED` | `true` | Enable IPv6 support |
-| `DISCORD_WEBHOOK_URL` | *(empty)* | Optional Discord webhook for notifications |
+|---|---|---|
+| `CF_API_TOKEN` | *required* | Cloudflare API token (Zone:Read + DNS:Edit) |
+| `ADMIN_EMAIL` | `admin@local` | Login email for the web UI |
+| `ADMIN_PASSWORD` | `ChangeMe!` | Login password — change this |
+| `SECRET_KEY` | *required* | Secret used to sign session tokens. Use `openssl rand -hex 32` to generate |
+| `POLL_INTERVAL_SECONDS` | `300` | Seconds between automatic IP checks (60–7200) |
+| `IPV6_ENABLED` | `false` | Enable IPv6 detection and AAAA record updates |
+| `DISCORD_WEBHOOK_URL` | *(empty)* | Discord webhook for IP change / error notifications |
+| `TZ` | `America/Denver` | Server timezone for log timestamps |
 
-### Cloudflare API Token Permissions
+### Cloudflare Zone ID
 
-For security best practices, create a token with minimal required permissions:
+Each domain you add requires its Zone ID, which you can find in the Cloudflare dashboard:
 
-1. **Zone:Zone:Read** - Required to resolve domain names to zone IDs
-2. **Zone:DNS:Edit** - Required to create/update/delete DNS records
+1. Go to your domain in Cloudflare
+2. On the right-hand sidebar of the Overview page, copy the **Zone ID**
+3. Paste it when adding the domain in Dreadnought
 
-You can scope the token to specific zones rather than all zones for better security.
+### TTL Behaviour
 
-### DNS Record Configuration
+| Record type | TTL behaviour |
+|---|---|
+| Normal | Uses the value you set (1–86400 seconds). `1` = Cloudflare "Auto" |
+| Proxied | Forced to Auto (300s) by Cloudflare regardless of your setting |
 
-#### Record Types
-- **A Records**: IPv4 addresses (automatically uses current IPv4)
-- **AAAA Records**: IPv6 addresses (automatically uses current IPv6)
-
-#### TTL Behavior
-- **Normal Records**: Use the TTL value you specify (1-86400 seconds)
-- **Proxied Records**: TTL is automatically set to "Auto" (300s) by Cloudflare
-- **TTL = 1**: Represents "Auto" in Cloudflare's system
-
-#### Proxied Records
-When a record is marked as "proxied":
-- Traffic routes through Cloudflare's proxy
-- TTL is forced to "Auto" regardless of your setting
-- Additional Cloudflare features (caching, security, etc.) are enabled
+---
 
 ## Usage
 
+### Adding a Domain
+
+1. Go to **Domains → Add Domain**
+2. Enter the domain name (e.g. `example.com`) and its Cloudflare Zone ID
+3. Save — the domain is now available when adding records
+
 ### Adding DNS Records
 
-1. Go to the **Records** tab
-2. Click **Add Record**
-3. Fill in the form:
-   - **Domain**: The zone name (e.g., `example.com`)
-   - **FQDN**: Full hostname (e.g., `vpn.example.com`)
-   - **Type**: A (IPv4) or AAAA (IPv6)
-   - **Proxied**: Enable Cloudflare proxy (optional)
-   - **TTL**: Time to live in seconds (ignored if proxied)
-4. Click **Create**
+1. Go to **Records → Add Record**
+2. Select your domain from the dropdown
+3. Enter the **Host** — use `@` for the root domain, or a subdomain name (e.g. `vpn`, `www`)
+4. Choose **Type**: A (IPv4) or AAAA (IPv6)
+5. Set **Proxied** and **TTL** as needed
+6. Click **Create** — the record is immediately synced to Cloudflare with your current IP
 
-The record will be immediately synced to Cloudflare using your current IP address.
+### Bulk Import
 
-### Importing Legacy Records
-
-If you have existing DNS records in JSON format:
-
-1. Go to the **Import** tab
-2. Paste your JSON data (see format below)
-3. Use **Preview Import** to validate
-4. Uncheck "Dry run" and click **Import Records**
-
-#### Import JSON Format
+1. Go to **Import**
+2. Paste a JSON array of records (see format below)
+3. Click **Preview Import** (dry run) to validate before committing
+4. Uncheck "Dry run" and click **Import Records** to create them
 
 ```json
 [
-  {
-    "domain": "example.com",
-    "host": "vpn",
-    "ip_version": 4,
-    "ttl": 300,
-    "proxied": false
-  },
-  {
-    "domain": "example.com",
-    "host": "@",
-    "ip_version": 4,
-    "ttl": 300,
-    "proxied": true
-  }
+  { "domain": "example.com", "host": "vpn",  "ip_version": 4, "ttl": 300, "proxied": false },
+  { "domain": "example.com", "host": "@",    "ip_version": 4, "ttl": 300, "proxied": true  },
+  { "domain": "example.com", "host": "mail", "ip_version": 4, "ttl": 300, "proxied": false }
 ]
 ```
 
-- `host`: Use `"@"` for the root domain, or subdomain name
-- `ip_version`: `4` for A records, `6` for AAAA records
-- `ttl`: TTL in seconds (use `1` for Auto)
-- `proxied`: Enable Cloudflare proxy
+---
 
 ## Troubleshooting
 
-### Common Issues
+### "Unable to open database file"
 
-#### "Unable to open database file" (Raspberry Pi / Linux)
-
-**Error Message:**
 ```
 sqlite3.OperationalError: unable to open database file
 ```
 
-**Solution:**
-This happens when the `./data` directory doesn't exist or has incorrect permissions.
+The `./data` directory is missing or the container can't write to it.
 
 ```bash
-# Stop containers
 docker compose down
-
-# Create data directory with proper permissions
-mkdir -p ./data
-chmod 777 ./data
-
-# Or run the setup script
-chmod +x setup.sh
-./setup.sh
-
-# Restart containers
+mkdir -p ./data && chmod 777 ./data
 docker compose up -d
 ```
 
-**Root Cause:** The Docker containers need write access to the `./data` directory to create and modify the SQLite database. The setup script handles this automatically.
+### "Failed to resolve zone_id for domain"
 
-#### "Failed to resolve zone_id for domain"
-- Verify your Cloudflare API token has Zone:Zone:Read permission
-- Ensure the domain is added to your Cloudflare account
-- Check that the domain spelling is correct
+- Verify your API token has `Zone → Zone → Read` permission
+- Confirm the domain is active in your Cloudflare account
+- Double-check the spelling of the domain name
 
-#### "Rate limit exceeded"
-- The system handles rate limits automatically with exponential backoff
-- If persistent, consider increasing `POLL_INTERVAL_SECONDS`
-- Check for other applications using the same API token
+### "Rate limit exceeded"
 
-#### "CNAME record exists, cannot create A/AAAA record"
-- DNS rules prevent A/AAAA records on names with CNAME records
-- Remove the CNAME record first, or use a different hostname
+The system handles this automatically with exponential backoff. If it persists, increase `POLL_INTERVAL_SECONDS` or check whether another application is sharing the same API token.
 
-#### Container shows "unhealthy"
+### "CNAME record exists, cannot create A/AAAA record"
 
-**Check logs:**
+Cloudflare does not allow A/AAAA records on a name that already has a CNAME. Remove the CNAME from Cloudflare first, then add the record in Dreadnought.
+
+### Container shows "unhealthy"
+
 ```bash
-docker compose logs api web worker
-```
+# Check logs for the specific service
+docker compose logs api
+docker compose logs web
+docker compose logs worker
 
-**Common fixes:**
-```bash
-# Restart specific container
-docker compose restart web
+# Restart a specific service
+docker compose restart api
 
-# Restart all containers
-docker compose restart
-
-# Rebuild and restart
+# Rebuild from scratch
 docker compose up -d --build
 ```
 
-## Security Considerations
-
-### API Token Security
-- Store your Cloudflare API token securely
-- Use the principle of least privilege (limit token scope to required zones)
-- Rotate tokens periodically
-- Never commit tokens to version control
-
-### Session Security
-- Sessions use HttpOnly cookies with SameSite=strict
-- CSRF protection on all state-changing operations
-- Automatic session expiration (30 minutes)
+---
 
 ## Running Tests
 
@@ -284,11 +253,21 @@ pip install -r requirements.txt
 pytest
 ```
 
-## License
+---
 
-This project is licensed under the MIT License.
+## Contributing
+
+Contributions are very welcome! Whether it's a bug fix, new feature, documentation improvement, or a review — please feel free to open an issue to discuss ideas or submit a pull request directly.
+
+---
 
 ## Support
 
-For issues, questions, or contributions, please visit the GitHub repository.
+- **Questions / Ideas**: [GitHub Discussions](https://github.com/dreadnought-0/Dreadnought-DDNS/discussions)
+- **Bug Reports**: [GitHub Issues](https://github.com/dreadnought-0/Dreadnought-DDNS/issues)
 
+---
+
+## License
+
+MIT License

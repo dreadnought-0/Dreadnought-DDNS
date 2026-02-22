@@ -1,0 +1,25 @@
+# Local documentation (not tracked in git)
+.docs/
+
+# Environment files
+.env
+
+# Data directory
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
